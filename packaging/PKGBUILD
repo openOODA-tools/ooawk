@@ -1,0 +1,21 @@
+# Maintainer: openOODA-tools <ops@openooda.org>
+pkgname=ooawk-bin
+_pkgname=ooawk
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Data-driven pattern scanning and text processing language with exact arithmetic."
+arch=('x86_64')
+url="https://github.com/openOODA-tools/ooawk"
+license=('Apache-2.0')
+depends=('glibc')
+provides=('ooawk')
+conflicts=('ooawk')
+source_x86_64=("${url}/releases/download/v${pkgver}/ooawk-linux-x86_64"
+               "uninstall.sh::https://raw.githubusercontent.com/openOODA-tools/${_pkgname}/v${pkgver}/uninstall.sh")
+sha256sums_x86_64=('SKIP'
+                   'SKIP')
+
+package() {
+    install -Dm755 "${srcdir}/ooawk-linux-x86_64" "${pkgdir}/usr/bin/ooawk"
+    install -Dm755 uninstall.sh "${pkgdir}/usr/bin/ooawk-uninstall"
+}
