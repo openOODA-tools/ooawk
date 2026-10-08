@@ -1,0 +1,102 @@
+// # ooawk Record Processing and Pipeline Engine
+//
+// Logline: Applies record projections, predicate filtering, and aggregations across text streams.
+//
+// Setup: Demands pure algorithmic dispatch over AwkRecord structures.
+//
+// Beats:
+//   1. Parse comma-separated column specification indices into structured integer lists.
+//   2. Project indexed fields from records separated by custom output field separators (OFS).
+//   3. Execute streaming record filters and compute column aggregate metrics.
+
+import "core/record_lexer.oo";
+import "core/expr_eval.oo";
+
+pub fn parse_column_list(cols_str: String) -> List[Int] {
+    let mut cols: List[Int] = list_new();
+    let trimmed: String = str_trim(cols_str);
+    if chars_len(trimmed) == 0 {
+        return cols;
+    }
+    let parts: List[String] = str_split(trimmed, ",");
+    let count: Int = list_len(parts);
+    let mut i: Int = 0;
+    while i < count {
+        let p: String = str_trim(list_get(parts, i));
+        if is_numeric_str(p) {
+            let col_idx: Int = parse_int_val(p);
+            cols = list_push(cols, col_idx);
+        }
+        i = i + 1;
+    }
+    return cols;
+}
+
+pub fn project_record_fields(rec: AwkRecord, cols: List[Int], ofs: String) -> String {
+    let count: Int = list_len(cols);
+    if count == 0 {
+        return rec.raw;
+    }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < count {
+        let col_idx: Int = list_get(cols, i);
+        let val: String = get_record_field(rec, col_idx);
+        if i > 0 {
+            out = out + ofs;
+        }
+        out = out + val;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn process_text_stream(input: String, fs_sep: String, ofs: String, cols: List[Int], cond_col: Int, cond_op: String, cond_target: String) -> List[String] {
+    let mut output: List[String] = list_new();
+    let lines: List[String] = str_split(input, "\n");
+    let total: Int = list_len(lines);
+    let mut i: Int = 0;
+
+    while i < total {
+        let raw_line: String = list_get(lines, i);
+        if i + 1 < total || chars_len(raw_line) > 0 {
+            let nr: Int = i + 1;
+            let rec: AwkRecord = make_awk_record(nr, raw_line, fs_sep);
+            let mut matches: Bool = true;
+            if cond_col >= 0 && chars_len(cond_op) > 0 {
+                let fval: String = get_record_field(rec, cond_col);
+                matches = eval_condition(fval, cond_op, cond_target);
+            }
+            if matches {
+                let projected: String = project_record_fields(rec, cols, ofs);
+                output = list_push(output, projected);
+            }
+        }
+        i = i + 1;
+    }
+
+    return output;
+}
+
+pub fn aggregate_column_stream(input: String, fs_sep: String, col_idx: Int) -> AwkStatsResult {
+    let mut numbers: List[Int] = list_new();
+    let lines: List[String] = str_split(input, "\n");
+    let total: Int = list_len(lines);
+    let mut i: Int = 0;
+
+    while i < total {
+        let raw_line: String = list_get(lines, i);
+        if chars_len(str_trim(raw_line)) > 0 {
+            let nr: Int = i + 1;
+            let rec: AwkRecord = make_awk_record(nr, raw_line, fs_sep);
+            let val_str: String = get_record_field(rec, col_idx);
+            if is_numeric_str(val_str) {
+                let n: Int = parse_int_val(val_str);
+                numbers = list_push(numbers, n);
+            }
+        }
+        i = i + 1;
+    }
+
+    return compute_stats(numbers);
+}

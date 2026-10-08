@@ -1,52 +1,93 @@
-// # ooawk Main Entry Point
+// # ooawk Main Entry Point - Sovereign Record Processor
 //
 // Logline: Data-driven pattern scanning and text processing language with exact arithmetic.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Requires FsReadCap, ProcessCap, EnvCap. Operates with zero ambient authority.
 //
 // Beats:
-//   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded ooawk operations.
-//   3. Format and output structured results to standard output.
+//   1. Dispatch --help, --version, and --mcp early without ambient side effects.
+//   2. Ingest records from file or standard input stream under explicit capabilities.
+//   3. Project indexed fields, evaluate predicate filters, or compute exact aggregates.
+
+import "core/expr_eval.oo";
+import "core/record_engine.oo";
+import "render/awk_theme.oo";
+import "ipc/awk_opts.oo";
+import "ipc/mcp_serve.oo";
 
 fn render_help() -> String {
-    return "ooawk 0.1.0 (openOODA sovereign search & inspection)\n"
-        + "usage: ooawk [options] [ARGUMENTS]...\n\n"
+    return "ooawk 0.2.0 (openOODA sovereign search & inspection)\n"
+        + "usage: ooawk [options] [EXPR] [FILE]...\n\n"
         + "Data-driven pattern scanning and text processing language with exact arithmetic.\n\n"
         + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
+        + "  -h, --help                 display this help and exit\n"
+        + "  -v, --version              output version information and exit\n"
+        + "  -F <SEP>                   field separator [default: whitespace]\n"
+        + "  -v OFS=<SEP>               output field separator [default: space]\n"
+        + "  -c, --cols <1,2...>        comma-separated list of column numbers to project\n"
+        + "      --where <COL,OP,VAL>   filter rows (e.g. 2,>,100 or 1,==,root)\n"
+        + "  -s, --stats <COL>          compute count, sum, min, max, mean on column\n"
+        + "      --json                 format output as structured JSON\n"
+        + "      --mcp                  run as Model Context Protocol stdio server\n";
 }
 
-fn render_version() -> String {
-    return "ooawk 0.1.0 (openOODA sovereign search & inspection)\n";
-}
+pub fn main(
+    fs: &FsReadCap,
+    proc_cap: &ProcessCap,
+    env: &EnvCap,
+    args: List[String]
+) -> Result[Int, String] {
+    let opts: AwkOpts = parse_awk_opts(args);
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
-    let mut i: Int = 0;
-
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
-        }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"ooawk\"}}\n");
-            return 0;
-        }
-        i = i + 1;
+    if opts.mode == "help" {
+        print(render_help());
+        return Ok(0);
+    }
+    if opts.mode == "version" {
+        println("ooawk 0.2.0 (openOODA sovereign search & inspection)");
+        return Ok(0);
+    }
+    if opts.mode == "mcp" {
+        run_mcp_server(fs);
+        return Ok(0);
     }
 
-    print("ooawk: sovereign capability-bounded utility ready\n");
-    return 0;
+    let mut input_text: String = "";
+    if chars_len(opts.input_file) > 0 {
+        let r: Result[String, String] = read_file(fs, opts.input_file);
+        if !r.is_ok() {
+            println("ooawk: " + opts.input_file + ": No such file or directory");
+            return Ok(2);
+        }
+        input_text = match r { Ok(s) => s, Err(_) => "" };
+    } else {
+        let r: Result[String, String] = oo_read_stdin_chunk(fs, 65536);
+        if r.is_ok() {
+            input_text = match r { Ok(s) => s, Err(_) => "" };
+        }
+    }
+
+    if opts.mode == "stats" {
+        let stats: AwkStatsResult = aggregate_column_stream(input_text, opts.fs_sep, opts.stats_col);
+        if opts.json_output {
+            println(render_stats_json(stats, opts.stats_col));
+        } else {
+            print(render_stats_human(stats, opts.stats_col));
+        }
+        return Ok(0);
+    }
+
+    let results: List[String] = process_text_stream(input_text, opts.fs_sep, opts.ofs, opts.columns, opts.cond_col, opts.cond_op, opts.cond_target);
+    if opts.json_output {
+        println(render_lines_json(results));
+    } else {
+        let count: Int = list_len(results);
+        let mut i: Int = 0;
+        while i < count {
+            println(list_get(results, i));
+            i = i + 1;
+        }
+    }
+
+    return Ok(0);
 }

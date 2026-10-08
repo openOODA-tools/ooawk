@@ -1,0 +1,133 @@
+// # ooawk Command-Line Options Parser
+//
+// Logline: Parses command-line arguments for pattern scanning, column projection, and MCP modes.
+//
+// Setup: Pure string argument parser with defaults for sovereign record processing.
+//
+// Beats:
+//   1. Define AwkOpts configuration model.
+//   2. Parse flags for field separators (-F), output separators, and projection columns.
+//   3. Extract where-clauses, statistical aggregations, and JSON formatting directives.
+
+import "core/record_engine.oo";
+import "core/expr_eval.oo";
+
+pub type AwkOpts = struct {
+    mode: String,
+    fs_sep: String,
+    ofs: String,
+    columns: List[Int],
+    cond_col: Int,
+    cond_op: String,
+    cond_target: String,
+    stats_col: Int,
+    json_output: Bool,
+    input_file: String,
+    raw_expr: String
+};
+
+pub fn default_awk_opts() -> AwkOpts {
+    return AwkOpts {
+        mode: "eval",
+        fs_sep: " ",
+        ofs: " ",
+        columns: list_new(),
+        cond_col: -1,
+        cond_op: "",
+        cond_target: "",
+        stats_col: 0,
+        json_output: false,
+        input_file: "",
+        raw_expr: ""
+    };
+}
+
+fn is_digit_char(c: String) -> Bool {
+    return c == "0" || c == "1" || c == "2" || c == "3" || c == "4" ||
+           c == "5" || c == "6" || c == "7" || c == "8" || c == "9";
+}
+
+fn extract_columns_from_print_expr(expr: String) -> List[Int] {
+    let mut cols: List[Int] = list_new();
+    let n: Int = chars_len(expr);
+    let mut i: Int = 0;
+    while i < n {
+        if char_at(expr, i) == "$" && i + 1 < n {
+            i = i + 1;
+            let start: Int = i;
+            while i < n && is_digit_char(char_at(expr, i)) {
+                i = i + 1;
+            }
+            if i > start {
+                let num_str: String = str_slice(expr, start, i);
+                let col: Int = parse_int_val(num_str);
+                cols = list_push(cols, col);
+            }
+        } else {
+            i = i + 1;
+        }
+    }
+    return cols;
+}
+
+pub fn parse_awk_opts(args: List[String]) -> AwkOpts {
+    let mut opts: AwkOpts = default_awk_opts();
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+
+    while i < n {
+        let arg: String = list_get(args, i);
+        if arg == "-h" || arg == "--help" {
+            opts.mode = "help";
+            return opts;
+        } else if arg == "--version" {
+            opts.mode = "version";
+            return opts;
+        } else if arg == "-v" && i + 1 < n && (list_get(args, i + 1) == "--version" || list_get(args, i + 1) == "-v") {
+            opts.mode = "version";
+            return opts;
+        } else if arg == "--mcp" {
+            opts.mode = "mcp";
+            return opts;
+        } else if (arg == "-F" || arg == "--field-separator") && i + 1 < n {
+            i = i + 1;
+            opts.fs_sep = list_get(args, i);
+        } else if (arg == "-c" || arg == "--cols" || arg == "--columns") && i + 1 < n {
+            i = i + 1;
+            opts.columns = parse_column_list(list_get(args, i));
+        } else if (arg == "-s" || arg == "--stats") && i + 1 < n {
+            i = i + 1;
+            opts.mode = "stats";
+            opts.stats_col = parse_int_val(list_get(args, i));
+        } else if arg == "--where" && i + 1 < n {
+            i = i + 1;
+            let pred: String = list_get(args, i);
+            let parts: List[String] = str_split(pred, ",");
+            if list_len(parts) >= 3 {
+                opts.cond_col = parse_int_val(list_get(parts, 0));
+                opts.cond_op = list_get(parts, 1);
+                opts.cond_target = list_get(parts, 2);
+            }
+        } else if (arg == "-v" || arg == "--assign") && i + 1 < n {
+            i = i + 1;
+            let assign_str: String = list_get(args, i);
+            if str_starts_with(assign_str, "OFS=") {
+                opts.ofs = str_slice(assign_str, 4, chars_len(assign_str));
+            } else if str_starts_with(assign_str, "FS=") {
+                opts.fs_sep = str_slice(assign_str, 3, chars_len(assign_str));
+            }
+        } else if arg == "--json" {
+            opts.json_output = true;
+        } else if !str_starts_with(arg, "-") {
+            if chars_len(opts.raw_expr) == 0 && (contains_substr(arg, "$") || contains_substr(arg, "print")) {
+                opts.raw_expr = arg;
+                opts.columns = extract_columns_from_print_expr(arg);
+            } else if chars_len(opts.input_file) == 0 {
+                opts.input_file = arg;
+            }
+        }
+        i = i + 1;
+    }
+
+    return opts;
+}

@@ -1,0 +1,138 @@
+// # ooawk Expression Evaluation and Numeric Arithmetic Engine
+//
+// Logline: Evaluates field predicate filters, relational comparisons, and integer aggregations.
+//
+// Setup: Pure algorithmic evaluator for exact arithmetic without floating point drift.
+//
+// Beats:
+//   1. Define AwkStatsResult model capturing count, sum, min, max, and mean.
+//   2. Parse integer values and inspect string digit contents.
+//   3. Evaluate equality, inequality, ordered comparisons, and substring matching.
+
+pub type AwkStatsResult = struct {
+    count: Int,
+    sum: Int,
+    min: Int,
+    max: Int,
+    mean: Int
+};
+
+pub fn digit_of(c: String) -> Int {
+    let s: String = "0123456789";
+    let mut i: Int = 0;
+    while i < 10 {
+        if char_at(s, i) == c { return i; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+pub fn is_numeric_str(s: String) -> Bool {
+    let trimmed: String = str_trim(s);
+    let n: Int = chars_len(trimmed);
+    if n == 0 { return false; }
+    let mut i: Int = 0;
+    if char_at(trimmed, 0) == "-" {
+        i = 1;
+        if n == 1 { return false; }
+    }
+    while i < n {
+        let c: String = char_at(trimmed, i);
+        if c != "0" && c != "1" && c != "2" && c != "3" && c != "4" &&
+           c != "5" && c != "6" && c != "7" && c != "8" && c != "9" {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn parse_int_val(s: String) -> Int {
+    let trimmed: String = str_trim(s);
+    let n: Int = chars_len(trimmed);
+    if n == 0 { return 0; }
+    let mut is_neg: Bool = false;
+    let mut start: Int = 0;
+    if char_at(trimmed, 0) == "-" {
+        is_neg = true;
+        start = 1;
+    }
+    let mut v: Int = 0;
+    let mut i: Int = start;
+    while i < n {
+        v = v * 10 + digit_of(char_at(trimmed, i));
+        i = i + 1;
+    }
+    if is_neg {
+        return 0 - v;
+    }
+    return v;
+}
+
+pub fn contains_substr(haystack: String, needle: String) -> Bool {
+    let hlen: Int = chars_len(haystack);
+    let nlen: Int = chars_len(needle);
+    if nlen == 0 { return true; }
+    if nlen > hlen { return false; }
+    let limit: Int = hlen - nlen;
+    let mut i: Int = 0;
+    while i <= limit {
+        let sub: String = str_slice(haystack, i, i + nlen);
+        if sub == needle {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn eval_condition(val: String, op: String, target: String) -> Bool {
+    if op == "==" || op == "=" {
+        return val == target;
+    }
+    if op == "!=" {
+        return val != target;
+    }
+    if op == "~" || op == "contains" {
+        return contains_substr(val, target);
+    }
+    if op == "!~" {
+        return !contains_substr(val, target);
+    }
+    if is_numeric_str(val) && is_numeric_str(target) {
+        let nv: Int = parse_int_val(val);
+        let nt: Int = parse_int_val(target);
+        if op == ">" { return nv > nt; }
+        if op == "<" { return nv < nt; }
+        if op == ">=" { return nv >= nt; }
+        if op == "<=" { return nv <= nt; }
+    }
+    return false;
+}
+
+pub fn compute_stats(numbers: List[Int]) -> AwkStatsResult {
+    let count: Int = list_len(numbers);
+    if count == 0 {
+        return AwkStatsResult { count: 0, sum: 0, min: 0, max: 0, mean: 0 };
+    }
+    let first: Int = list_get(numbers, 0);
+    let mut s: Int = 0;
+    let mut mn: Int = first;
+    let mut mx: Int = first;
+    let mut i: Int = 0;
+    while i < count {
+        let val: Int = list_get(numbers, i);
+        s = s + val;
+        if val < mn { mn = val; }
+        if val > mx { mx = val; }
+        i = i + 1;
+    }
+    let avg: Int = s / count;
+    return AwkStatsResult {
+        count: count,
+        sum: s,
+        min: mn,
+        max: mx,
+        mean: avg
+    };
+}

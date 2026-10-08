@@ -1,0 +1,18 @@
+// # ooawk Core Subsystem Anchor
+//
+// Logline: Consolidates record tokenization, expression evaluation, and pipeline projection.
+//
+// Setup: Root barrel shim for core record processing and arithmetic domain.
+//
+// Beats:
+//   1. Re-export AwkRecord structures and field delimiter tokenizers.
+//   2. Re-export relational predicate evaluators and exact integer arithmetic.
+//   3. Re-export pipeline stream projection and aggregate metrics collectors.
+
+import "core/record_lexer.oo";
+import "core/expr_eval.oo";
+import "core/record_engine.oo";
+
+pub fn core_subsystem_version() -> String {
+    return "0.2.0";
+}

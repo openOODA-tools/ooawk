@@ -1,0 +1,93 @@
+// # ooawk Rendering and Theme Formatter
+//
+// Logline: Formats projected records, aggregate metrics, and tabular fields for human and JSON output.
+//
+// Setup: Pure string formatting utility supporting ANSI terminal styling and JSON serialization.
+//
+// Beats:
+//   1. Provide ANSI styling helpers for column boundaries and summary highlights.
+//   2. Serialize AwkRecord structures and projected text lines to JSON format.
+//   3. Render human-readable summary tables and JSON metrics for column aggregations.
+
+import "core/record_lexer.oo";
+import "core/expr_eval.oo";
+
+pub fn ansi_reset() -> String { return "\x1b[0m"; }
+pub fn ansi_bold() -> String { return "\x1b[1m"; }
+pub fn ansi_dim() -> String { return "\x1b[2m"; }
+pub fn ansi_green() -> String { return "\x1b[32m"; }
+pub fn ansi_cyan() -> String { return "\x1b[36m"; }
+pub fn ansi_yellow() -> String { return "\x1b[33m"; }
+
+fn json_escape_simple(s: String) -> String {
+    let mut out: String = "";
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "\\" {
+            out = out + "\\\\";
+        } else if c == "\"" {
+            out = out + "\\\"";
+        } else if c == "\n" {
+            out = out + "\\n";
+        } else if c == "\r" {
+            out = out + "\\r";
+        } else if c == "\t" {
+            out = out + "\\t";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn render_record_json(rec: AwkRecord) -> String {
+    let mut j: String = "{\"nr\":" + to_string(rec.nr)
+        + ",\"nf\":" + to_string(rec.nf)
+        + ",\"raw\":\"" + json_escape_simple(rec.raw) + "\""
+        + ",\"fields\":[";
+    let count: Int = list_len(rec.fields);
+    let mut i: Int = 0;
+    while i < count {
+        if i > 0 { j = j + ","; }
+        let f: String = list_get(rec.fields, i);
+        j = j + "\"" + json_escape_simple(f) + "\"";
+        i = i + 1;
+    }
+    j = j + "]}";
+    return j;
+}
+
+pub fn render_lines_json(lines: List[String]) -> String {
+    let mut j: String = "[";
+    let count: Int = list_len(lines);
+    let mut i: Int = 0;
+    while i < count {
+        if i > 0 { j = j + ","; }
+        let l: String = list_get(lines, i);
+        j = j + "\"" + json_escape_simple(l) + "\"";
+        i = i + 1;
+    }
+    j = j + "]";
+    return j;
+}
+
+pub fn render_stats_human(stats: AwkStatsResult, col: Int) -> String {
+    return ansi_bold() + "ooawk Column #" + to_string(col) + " Summary:" + ansi_reset() + "\n"
+        + "  Count: " + ansi_cyan() + to_string(stats.count) + ansi_reset() + "\n"
+        + "  Sum:   " + ansi_green() + to_string(stats.sum) + ansi_reset() + "\n"
+        + "  Min:   " + to_string(stats.min) + "\n"
+        + "  Max:   " + to_string(stats.max) + "\n"
+        + "  Mean:  " + ansi_yellow() + to_string(stats.mean) + ansi_reset() + "\n";
+}
+
+pub fn render_stats_json(stats: AwkStatsResult, col: Int) -> String {
+    return "{\"column\":" + to_string(col)
+        + ",\"count\":" + to_string(stats.count)
+        + ",\"sum\":" + to_string(stats.sum)
+        + ",\"min\":" + to_string(stats.min)
+        + ",\"max\":" + to_string(stats.max)
+        + ",\"mean\":" + to_string(stats.mean) + "}";
+}

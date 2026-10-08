@@ -1,0 +1,16 @@
+// # ooawk Render Subsystem Anchor
+//
+// Logline: Consolidates terminal styling, JSON line rendering, and metrics formatting.
+//
+// Setup: Root barrel shim for record rendering and theming domain.
+//
+// Beats:
+//   1. Re-export ANSI color styles and text formatting primitives.
+//   2. Re-export JSON serialization for records and line collections.
+//   3. Re-export human and JSON statistical report formatters.
+
+import "render/awk_theme.oo";
+
+pub fn render_subsystem_version() -> String {
+    return "0.2.0";
+}

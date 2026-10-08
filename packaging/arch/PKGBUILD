@@ -1,7 +1,7 @@
 # Maintainer: openOODA-tools <ops@openooda.org>
 pkgname=ooawk-bin
 _pkgname=ooawk
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Data-driven pattern scanning and text processing language with exact arithmetic."
 arch=('x86_64')

@@ -1,0 +1,88 @@
+// # ooawk Record Lexer and Field Delimiter Engine
+//
+// Logline: Parses input records into numbered fields according to configurable field separators.
+//
+// Setup: Pure string lexer splitting records by whitespace runs or literal character delimiters.
+//
+// Beats:
+//   1. Define AwkRecord model capturing record sequence (NR) and field count (NF).
+//   2. Split input text lines into isolated fields respecting space/tab runs or custom FS.
+//   3. Provide indexed field extraction including whole-record ($0) representation.
+
+pub type AwkRecord = struct {
+    nr: Int,
+    raw: String,
+    nf: Int,
+    fields: List[String]
+};
+
+fn is_space_or_tab(c: String) -> Bool {
+    return c == " " || c == "\t" || c == "\r";
+}
+
+pub fn split_by_whitespace(line: String) -> List[String] {
+    let mut fields: List[String] = list_new();
+    let n: Int = chars_len(line);
+    let mut i: Int = 0;
+
+    while i < n {
+        while i < n && is_space_or_tab(char_at(line, i)) {
+            i = i + 1;
+        }
+        if i >= n {
+            return fields;
+        }
+        let start: Int = i;
+        while i < n && !is_space_or_tab(char_at(line, i)) {
+            i = i + 1;
+        }
+        let token: String = str_slice(line, start, i);
+        fields = list_push(fields, token);
+    }
+    return fields;
+}
+
+pub fn split_by_delimiter(line: String, delim: String) -> List[String] {
+    let mut fields: List[String] = list_new();
+    let dlen: Int = chars_len(delim);
+    if dlen == 0 {
+        return split_by_whitespace(line);
+    }
+    let parts: List[String] = str_split(line, delim);
+    let count: Int = list_len(parts);
+    let mut i: Int = 0;
+    while i < count {
+        let p: String = list_get(parts, i);
+        fields = list_push(fields, p);
+        i = i + 1;
+    }
+    return fields;
+}
+
+pub fn tokenize_record_fields(line: String, fs_sep: String) -> List[String] {
+    if chars_len(fs_sep) == 0 || fs_sep == " " {
+        return split_by_whitespace(line);
+    }
+    return split_by_delimiter(line, fs_sep);
+}
+
+pub fn make_awk_record(nr: Int, line: String, fs_sep: String) -> AwkRecord {
+    let flds: List[String] = tokenize_record_fields(line, fs_sep);
+    let count: Int = list_len(flds);
+    return AwkRecord {
+        nr: nr,
+        raw: line,
+        nf: count,
+        fields: flds
+    };
+}
+
+pub fn get_record_field(rec: AwkRecord, idx: Int) -> String {
+    if idx == 0 {
+        return rec.raw;
+    }
+    if idx >= 1 && idx <= rec.nf {
+        return list_get(rec.fields, idx - 1);
+    }
+    return "";
+}
